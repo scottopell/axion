@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c6a24c82c7560900109be9dc3b1130de1a24f7df32effab5f76328bba7cb35de # shrinks to width = 15, height = 15, trail_moves = [Down, Left, Up]
+cc 890494f8b040fcac2565ac013741bed37040bc0ffbab411d1972a4399ccd585a # shrinks to existing_fill_rows = [6], start_x = 2, start_y = 1, trail_moves = [Down, Right, Up]

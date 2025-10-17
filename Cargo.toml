@@ -1,0 +1,19 @@
+[package]
+name = "xonix"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.28"
+rand = "0.8"
+
+[dev-dependencies]
+proptest = "1.0"
+
+[lib]
+name = "xonix"
+path = "src/lib.rs"
+
+[[bin]]
+name = "xonix-cli"
+path = "src/main.rs"
