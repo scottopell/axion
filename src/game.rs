@@ -330,17 +330,105 @@ impl Game {
     fn spawn_balls(&mut self, count: usize) {
         let mut rng = rand::thread_rng();
 
-        for _ in 0..count {
+        // Pre-compute player data (done once per spawn_balls call)
+        let player_pos = self.player.position;
+        let player_dir = self.player.direction;
+
+        const MIN_SAFE_DISTANCE: i32 = 5;
+        const DANGER_ZONE_WIDTH: i32 = 10;
+        const DANGER_ZONE_HEIGHT: i32 = 10; // Match width to catch diagonal trajectories
+        const MAX_ATTEMPTS: usize = 1000; // Prevent infinite loops
+
+        for ball_idx in 0..count {
+            let mut attempts = 0;
+
             loop {
+                attempts += 1;
+                if attempts > MAX_ATTEMPTS {
+                    eprintln!(
+                        "Warning: Could not find safe position for ball {} after {} attempts. \
+                         Skipping this ball.",
+                        ball_idx, MAX_ATTEMPTS
+                    );
+                    break; // Skip this ball rather than hang
+                }
+
                 let x = rng.gen_range(2..self.width - 2);
                 let y = rng.gen_range(2..self.height - 2);
 
-                if !self.is_filled(x, y) {
-                    let vx = if rng.gen_bool(0.5) { 1 } else { -1 };
-                    let vy = if rng.gen_bool(0.5) { 1 } else { -1 };
-                    self.balls.push(Ball::new(x, y, vx, vy));
-                    break;
+                // Check 1: Position must be empty (cheap, fail fast)
+                if self.is_filled(x, y) {
+                    continue;
                 }
+
+                // Check 2: Minimum manhattan distance (cheap: 2 abs, 1 add, 1 compare)
+                let dx = (x - player_pos.x).abs();
+                let dy = (y - player_pos.y).abs();
+                let manhattan_dist = dx + dy;
+
+                if manhattan_dist < MIN_SAFE_DISTANCE {
+                    continue; // Too close to player
+                }
+
+                // Check 3: Danger zone detection (medium cost)
+                let in_danger_zone = match player_dir {
+                    Direction::Right => {
+                        x <= player_pos.x + DANGER_ZONE_WIDTH
+                            && dy <= DANGER_ZONE_HEIGHT
+                    }
+                    Direction::Left => {
+                        x >= player_pos.x - DANGER_ZONE_WIDTH
+                            && dy <= DANGER_ZONE_HEIGHT
+                    }
+                    Direction::Down => {
+                        y <= player_pos.y + DANGER_ZONE_WIDTH
+                            && dx <= DANGER_ZONE_HEIGHT
+                    }
+                    Direction::Up => {
+                        y >= player_pos.y - DANGER_ZONE_WIDTH
+                            && dx <= DANGER_ZONE_HEIGHT
+                    }
+                };
+
+                // Smart velocity selection: choose safe velocity for position
+                // This is KEY for efficiency - we don't reject positions, we fix velocities
+                let (vx, vy) = if in_danger_zone {
+                    // In danger zone: choose velocity moving AWAY from player
+                    match player_dir {
+                        Direction::Right => {
+                            // Player moving right from left edge
+                            // Ball should move right (away from start) or perpendicular
+                            let vx = 1; // Always move right (away from player start)
+                            let vy = if rng.gen_bool(0.5) { 1 } else { -1 }; // Random vertical
+                            (vx, vy)
+                        }
+                        Direction::Left => {
+                            let vx = -1; // Move left (away from player start on right)
+                            let vy = if rng.gen_bool(0.5) { 1 } else { -1 };
+                            (vx, vy)
+                        }
+                        Direction::Down => {
+                            let vx = if rng.gen_bool(0.5) { 1 } else { -1 };
+                            let vy = 1; // Move down (away from player start at top)
+                            (vx, vy)
+                        }
+                        Direction::Up => {
+                            let vx = if rng.gen_bool(0.5) { 1 } else { -1 };
+                            let vy = -1; // Move up (away from player start at bottom)
+                            (vx, vy)
+                        }
+                    }
+                } else {
+                    // Outside danger zone: any velocity is safe
+                    (
+                        if rng.gen_bool(0.5) { 1 } else { -1 },
+                        if rng.gen_bool(0.5) { 1 } else { -1 },
+                    )
+                };
+
+                // All checks passed, velocity is safe for this position
+                self.balls.push(Ball::new(x, y, vx, vy));
+                break;
             }
         }
     }
@@ -374,6 +462,7 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entity::{Position, Direction};
     use proptest::prelude::*;
 
     // Strategy for generating valid directions
@@ -389,6 +478,40 @@ mod tests {
     // Strategy for generating sequences of moves
     fn move_sequence_strategy() -> impl Strategy<Value = Vec<Direction>> {
         prop::collection::vec(direction_strategy(), 1..100)
+    }
+
+    /// Calculate minimum time (in ticks) until ball and player could collide
+    /// Returns i32::MAX if no collision is possible in next 10 ticks
+    fn calculate_min_time_to_collision(
+        player_pos: Position,
+        player_dir: Direction,
+        ball_pos: Position,
+        ball_vel: (i32, i32),
+    ) -> i32 {
+        const SIMULATION_TICKS: i32 = 10;
+        const COLLISION_DISTANCE: i32 = 1; // Within 1 cell = collision
+
+        let mut sim_ball_pos = ball_pos;
+        let mut sim_player_pos = player_pos;
+
+        for tick in 1..=SIMULATION_TICKS {
+            // Move player (always in initial direction for this check)
+            sim_player_pos = sim_player_pos.moved(player_dir);
+
+            // Move ball
+            sim_ball_pos.x += ball_vel.0;
+            sim_ball_pos.y += ball_vel.1;
+
+            // Check collision
+            let dx = (sim_ball_pos.x - sim_player_pos.x).abs();
+            let dy = (sim_ball_pos.y - sim_player_pos.y).abs();
+
+            if dx <= COLLISION_DISTANCE && dy <= COLLISION_DISTANCE {
+                return tick;
+            }
+        }
+
+        i32::MAX // No collision in simulation window
     }
 
     proptest! {
@@ -888,6 +1011,113 @@ mod tests {
                 );
             }
         }
+
+        /// SAFETY PROPERTY: Initial game state must be winnable
+        ///
+        /// Tests that Game::new() produces a safe initial configuration where:
+        /// 1. All balls are at least 5 cells away from player (minimum reaction time)
+        /// 2. No balls in the "danger zone" are moving toward the player
+        /// 3. Time-to-collision for all balls is >= 5 ticks (500ms)
+        ///
+        /// This prevents unwinnable scenarios where a ball spawns on a collision
+        /// course with the player's starting position.
+        #[test]
+        fn prop_initial_state_is_safe(
+            width in 15i32..50,
+            height in 15i32..50,
+        ) {
+            const MIN_REACTION_TICKS: i32 = 5;
+            const DANGER_ZONE_WIDTH: i32 = 10;  // First 10 cells in player's direction
+            const DANGER_ZONE_HEIGHT: i32 = 3;  // ±3 cells from player's y position
+
+            let game = Game::new(width, height);
+
+            let player_pos = game.player.position;
+            let player_dir = game.player.direction;
+
+            for (i, ball) in game.balls.iter().enumerate() {
+                // Property 1: Minimum safe distance
+                let dx = (ball.position.x - player_pos.x).abs();
+                let dy = (ball.position.y - player_pos.y).abs();
+                let manhattan_dist = dx + dy;
+
+                prop_assert!(
+                    manhattan_dist >= MIN_REACTION_TICKS,
+                    "Ball {} at ({}, {}) is only {} cells from player at ({}, {}) \
+                     (minimum safe distance: {})",
+                    i,
+                    ball.position.x, ball.position.y,
+                    manhattan_dist,
+                    player_pos.x, player_pos.y,
+                    MIN_REACTION_TICKS
+                );
+
+                // Property 2: No collision course in danger zone
+                // Danger zone is in the direction the player is facing (initially Right)
+                let in_danger_zone = match player_dir {
+                    Direction::Right => {
+                        ball.position.x <= player_pos.x + DANGER_ZONE_WIDTH
+                            && (ball.position.y - player_pos.y).abs() <= DANGER_ZONE_HEIGHT
+                    }
+                    Direction::Left => {
+                        ball.position.x >= player_pos.x - DANGER_ZONE_WIDTH
+                            && (ball.position.y - player_pos.y).abs() <= DANGER_ZONE_HEIGHT
+                    }
+                    Direction::Down => {
+                        ball.position.y <= player_pos.y + DANGER_ZONE_WIDTH
+                            && (ball.position.x - player_pos.x).abs() <= DANGER_ZONE_HEIGHT
+                    }
+                    Direction::Up => {
+                        ball.position.y >= player_pos.y - DANGER_ZONE_WIDTH
+                            && (ball.position.x - player_pos.x).abs() <= DANGER_ZONE_HEIGHT
+                    }
+                };
+
+                if in_danger_zone {
+                    // Check if ball is moving toward player
+                    let moving_toward_player = match player_dir {
+                        Direction::Right => ball.velocity.0 < 0, // Ball moving left toward start
+                        Direction::Left => ball.velocity.0 > 0,  // Ball moving right
+                        Direction::Down => ball.velocity.1 < 0,  // Ball moving up
+                        Direction::Up => ball.velocity.1 > 0,    // Ball moving down
+                    };
+
+                    prop_assert!(
+                        !moving_toward_player,
+                        "Ball {} at ({}, {}) is in danger zone and moving toward player! \
+                         Velocity: ({}, {}), Player at ({}, {}) facing {:?}",
+                        i,
+                        ball.position.x, ball.position.y,
+                        ball.velocity.0, ball.velocity.1,
+                        player_pos.x, player_pos.y,
+                        player_dir
+                    );
+                }
+
+                // Property 3: Time-to-collision check
+                let time_to_collision = calculate_min_time_to_collision(
+                    player_pos,
+                    player_dir,
+                    ball.position,
+                    ball.velocity,
+                );
+
+                if time_to_collision < i32::MAX {
+                    prop_assert!(
+                        time_to_collision >= MIN_REACTION_TICKS,
+                        "Ball {} at ({}, {}) with velocity ({}, {}) will collide with player \
+                         in {} ticks (minimum reaction time: {}). Player at ({}, {}) facing {:?}",
+                        i,
+                        ball.position.x, ball.position.y,
+                        ball.velocity.0, ball.velocity.1,
+                        time_to_collision,
+                        MIN_REACTION_TICKS,
+                        player_pos.x, player_pos.y,
+                        player_dir
+                    );
+                }
+            }
+        }
     }
 
     // Regular unit tests for specific scenarios
@@ -1184,5 +1414,92 @@ mod tests {
         assert!(!game.player.is_drawing, "Drawing should be complete");
         assert_eq!(game.board[2][2], Cell::Filled, "Interior should be filled");
         assert_eq!(game.board[2][3], Cell::Filled, "Interior should be filled");
+    }
+
+    #[test]
+    fn test_no_ball_on_immediate_collision_course() {
+        // Run Game::new() many times and verify none produce the unwinnable scenario
+        // where a ball spawns on a collision course with the player's starting position
+        //
+        // This is a concrete test for the reported bug: player at (0, height/2) facing right,
+        // ball at (3, height/2) moving left creates an unwinnable game
+
+        const TEST_RUNS: usize = 1000;
+        const MIN_SAFE_DISTANCE: i32 = 5;
+
+        for iteration in 0..TEST_RUNS {
+            let game = Game::new(20, 20);
+
+            let player_pos = game.player.position;
+            let player_dir = game.player.direction;
+
+            for ball in &game.balls {
+                // Check 1: Ball should not be too close
+                let manhattan_dist = (ball.position.x - player_pos.x).abs()
+                    + (ball.position.y - player_pos.y).abs();
+
+                assert!(
+                    manhattan_dist >= MIN_SAFE_DISTANCE,
+                    "Iteration {}: Ball at ({}, {}) is only {} cells from player at ({}, {}) - TOO CLOSE!",
+                    iteration,
+                    ball.position.x, ball.position.y,
+                    manhattan_dist,
+                    player_pos.x, player_pos.y
+                );
+
+                // Check 2: If on same row/column as player, ball should not be moving toward them
+                match player_dir {
+                    Direction::Right => {
+                        // Player moving right from left edge
+                        if ball.position.y == player_pos.y {
+                            // Same row - check if ball is close and moving left (toward player)
+                            if ball.position.x < 10 && ball.velocity.0 < 0 {
+                                panic!(
+                                    "Iteration {}: UNWINNABLE STATE DETECTED! \
+                                     Ball at ({}, {}) moving left (velocity: {}) on same row as player at ({}, {}). \
+                                     This creates immediate collision course!",
+                                    iteration,
+                                    ball.position.x, ball.position.y,
+                                    ball.velocity.0,
+                                    player_pos.x, player_pos.y
+                                );
+                            }
+                        }
+                    }
+                    Direction::Left => {
+                        if ball.position.y == player_pos.y {
+                            if ball.position.x > game.width - 10 && ball.velocity.0 > 0 {
+                                panic!(
+                                    "Iteration {}: UNWINNABLE STATE! Ball moving right toward player at left side",
+                                    iteration
+                                );
+                            }
+                        }
+                    }
+                    Direction::Down => {
+                        if ball.position.x == player_pos.x {
+                            if ball.position.y < 10 && ball.velocity.1 < 0 {
+                                panic!(
+                                    "Iteration {}: UNWINNABLE STATE! Ball moving up toward player at top",
+                                    iteration
+                                );
+                            }
+                        }
+                    }
+                    Direction::Up => {
+                        if ball.position.x == player_pos.x {
+                            if ball.position.y > game.height - 10 && ball.velocity.1 > 0 {
+                                panic!(
+                                    "Iteration {}: UNWINNABLE STATE! Ball moving down toward player at bottom",
+                                    iteration
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        println!("✓ Ran {} iterations of Game::new() - all initial states were safe!", TEST_RUNS);
     }
 }
