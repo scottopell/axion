@@ -1,0 +1,9 @@
+# WASM build output
+pkg/
+
+# Node modules if using npm
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

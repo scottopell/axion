@@ -1,89 +1,91 @@
 # Xonix
 
-A Rust implementation of the classic Xonix territory-capturing game with a CLI interface.
+A Rust implementation of the classic territory-capturing game with CLI and Web (WASM) interfaces.
 
-## Game Overview
+## Game Rules
 
-Xonix is a territory-capturing game where you control a cursor that moves around the playfield. The objective is to claim territory by drawing lines into empty space and returning to filled areas. Watch out for bouncing balls that can destroy your trail!
+Control a cursor to claim territory by drawing lines from filled areas into empty space. Return to safety to capture territory. Avoid bouncing balls and your own trail. Fill 75% to win.
 
-### Rules
-- Move your cursor with arrow keys
-- Draw trails from filled areas into empty space
-- Return to filled areas to capture territory
-- Avoid balls bouncing in empty areas
-- Don't cross your own trail before reaching safety
-- Fill 75% of the field to win and advance to the next level
+**Controls:** Arrow keys (move), Q (quit), R (restart), Space (next level)
 
-## Architecture
+## Quick Start
 
-The project is structured to separate game logic from rendering, making it easy to add new rendering backends (like WebAssembly/Canvas):
-
-```
-src/
-├── lib.rs              # Library exports
-├── entity.rs           # Game entities (Player, Ball, Position, Direction)
-├── game.rs             # Core game logic and state management
-├── renderer.rs         # Renderer trait (abstraction layer)
-├── cli_renderer.rs     # CLI implementation using crossterm
-└── main.rs             # Game loop for CLI binary
-```
-
-### Key Design Decisions
-
-1. **Renderer Trait**: The `Renderer` trait abstracts all rendering operations, allowing different backends to be implemented without changing game logic.
-
-2. **Separation of Concerns**:
-   - `game.rs` contains pure game logic (no rendering)
-   - `cli_renderer.rs` handles all CLI-specific rendering
-   - `main.rs` orchestrates the game loop
-
-3. **WASM-Ready**: The architecture makes it straightforward to add a web renderer:
-   - Implement the `Renderer` trait for Canvas/WebGL
-   - Create a new binary target for WASM compilation
-   - Reuse all game logic from the library
-
-## Building and Running
-
-### Prerequisites
-- Rust 1.70 or later
-
-### Build
+### CLI Version
 ```bash
 cargo build --release
-```
-
-### Run
-```bash
 cargo run --bin xonix-cli
 ```
 
-## Controls
+### Web Version (60 FPS)
+```bash
+./build-web.sh          # Requires: cargo install wasm-pack
+cd www
+python3 -m http.server 8080
+# Open http://localhost:8080
+```
 
-- **Arrow Keys**: Move the cursor
-- **Q**: Quit game
-- **R**: Restart game
-- **Space**: Advance to next level (when level is won)
+**Web Features:** 60 FPS interpolated movement, ball motion blur trails, animated territory capture, retro pixel art aesthetic with CRT effects.
 
-## Adding a Web Renderer
+## Architecture
 
-To add a web renderer in the future:
+Renderer trait abstraction separates game logic from display. Game logic runs at 10 Hz; web renderer displays at 60 FPS via position interpolation (lerp).
 
-1. Create a new module `src/web_renderer.rs`
-2. Implement the `Renderer` trait for your web rendering backend
-3. Create a new binary `src/web_main.rs` with WASM bindings
-4. Add WASM build target to `Cargo.toml`
+```
+src/
+├── game.rs             # Core game logic (platform-agnostic)
+├── entity.rs           # Game entities (Player, Ball, Direction)
+├── renderer.rs         # Renderer trait abstraction
+├── cli_renderer.rs     # Terminal rendering (crossterm)
+├── web_renderer.rs     # Canvas 2D rendering (WASM)
+├── ball_trail.rs       # Motion blur trail system
+├── main.rs             # CLI entry point
+└── web_main.rs         # WASM entry point
+```
 
-Example structure:
-```rust
-// src/web_renderer.rs
-pub struct WebRenderer {
-    canvas: web_sys::HtmlCanvasElement,
-    context: web_sys::CanvasRenderingContext2d,
-}
+**Key Design:** `game.rs` contains zero rendering code. All display logic lives in renderer implementations, allowing the same game logic to power both CLI and web versions.
 
-impl Renderer for WebRenderer {
-    // Implement rendering using Canvas API
-}
+### Interpolation Example
+
+Game updates entity positions discretely at 10 Hz. Between updates, the web renderer smoothly interpolates positions at 60 FPS:
+
+```
+Ball moves (5,5) → (6,5):
+Frame 1: 5.0    Frame 4: 5.5    Frame 7: 6.0
+Frame 2: 5.17   Frame 5: 5.67
+Frame 3: 5.33   Frame 6: 5.83
+```
+
+Result: Buttery-smooth gliding motion despite discrete game updates.
+
+### Territory Capture Algorithm
+
+Classic Xonix flood-fill logic (game.rs:196-313):
+1. Player completes trail → trigger flood fill
+2. Find all empty regions via BFS
+3. Largest region = "outside" playable area
+4. Fill smaller enclosed regions (prioritize ball-free regions)
+
+## Testing
+
+```bash
+cargo test                           # Run all tests
+cargo test game::tests               # Specific module
+cargo test --release                 # Property tests (proptest)
+```
+
+Property-based tests validate invariants: fill percentage ≤100%, monotonic increase, balls stay in bounds, borders stay filled.
+
+## File Structure
+
+```
+.
+├── src/                # Rust source code
+├── www/                # Web assets (HTML, CSS, JS)
+│   └── pkg/            # Generated WASM files (gitignored)
+├── build-web.sh        # Web build script
+├── Cargo.toml          # Platform-conditional dependencies
+├── CLAUDE.md           # Development instructions for AI
+└── proptest-regressions/  # Test regression data (gitignored)
 ```
 
 ## License

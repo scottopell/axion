@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xonix - Territory Capturing Game</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>XONIX</h1>
+            <p class="subtitle">Territory Capturing Game</p>
+        </header>
+
+        <main>
+            <div class="game-container">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+
+            <div class="instructions">
+                <h2>How to Play</h2>
+                <ul>
+                    <li><strong>Arrow Keys:</strong> Move your cursor</li>
+                    <li><strong>Objective:</strong> Fill 75% of the field</li>
+                    <li><strong>Strategy:</strong> Draw trails from filled areas (blue) into empty space (black)</li>
+                    <li><strong>Warning:</strong> Avoid bouncing balls and don't cross your own trail!</li>
+                    <li><strong>Q:</strong> Quit | <strong>R:</strong> Restart | <strong>Space:</strong> Next Level</li>
+                </ul>
+            </div>
+        </main>
+
+        <footer>
+            <p>Built with Rust 🦀 + WebAssembly ⚡</p>
+            <p class="tech-note">Running at 60 FPS with interpolated animations</p>
+        </footer>
+    </div>
+
+    <script type="module" src="bootstrap.js"></script>
+</body>
+</html>

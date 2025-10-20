@@ -2,6 +2,12 @@
 /target/
 Cargo.lock
 
+# Testing artifacts
+proptest-regressions/
+
+# Web/WASM generated files
+www/pkg/
+
 # IDE
 .vscode/
 .idea/
@@ -12,4 +18,7 @@ Cargo.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# Tools
 .claude/
+.playwright-mcp/
