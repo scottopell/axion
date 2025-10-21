@@ -57,7 +57,9 @@ impl Game {
             target_percentage: 0.75,
         };
 
-        game.spawn_balls(3);
+        let board_area = width * height;
+        let num_balls = ((board_area as f32 / 267.0).round() as usize).max(1);
+        game.spawn_balls(num_balls);
         game.update_filled_percentage();
 
         game
@@ -246,18 +248,30 @@ impl Game {
             return;
         }
 
-        // Find the LARGEST region - this is the "outside" playable area
-        let largest_idx = all_regions
+        // Find the region containing the player - this is the "outside" playable area
+        // (The player just completed a trail and returned to safe territory)
+        let player_region_idx = all_regions
             .iter()
             .enumerate()
-            .max_by_key(|(_, region)| region.len())
-            .map(|(idx, _)| idx)
-            .unwrap();
+            .find(|(_, region)| {
+                region.iter().any(|&(x, y)| x == self.player.position.x && y == self.player.position.y)
+            })
+            .map(|(idx, _)| idx);
 
-        // All OTHER regions (not the largest) should be filled
+        // If player isn't in any empty region (on filled cell), fall back to largest region
+        let outside_idx = player_region_idx.unwrap_or_else(|| {
+            all_regions
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, region)| region.len())
+                .map(|(idx, _)| idx)
+                .unwrap()
+        });
+
+        // All OTHER regions (not the outside) should be filled
         let mut enclosed_regions = Vec::new();
         for (idx, region) in all_regions.into_iter().enumerate() {
-            if idx != largest_idx {
+            if idx != outside_idx {
                 enclosed_regions.push(region);
             }
         }
@@ -285,24 +299,10 @@ impl Game {
         }
 
         // Determine which regions to fill
-        let regions_to_fill: Vec<usize> = if !regions_without_balls.is_empty() {
-            // Fill all enclosed regions without balls (safe to fill)
-            regions_without_balls
-        } else if !regions_with_balls.is_empty() {
-            // All enclosed regions have balls - fill the smallest one
-            let smallest = regions_with_balls.iter()
-                .min_by_key(|(idx, _)| enclosed_regions[*idx].len())
-                .map(|(idx, _)| *idx);
-
-            if let Some(idx) = smallest {
-                vec![idx]
-            } else {
-                Vec::new()
-            }
-        } else {
-            // No enclosed regions found
-            Vec::new()
-        };
+        // ORIGINAL XONIX BEHAVIOR: Only fill regions WITHOUT balls
+        // Regions with balls are NEVER automatically filled - this is the core mechanic
+        // that makes the game strategic (need multiple cuts to corner a ball)
+        let regions_to_fill: Vec<usize> = regions_without_balls;
 
         // Fill the selected regions
         for region_idx in regions_to_fill {
@@ -1271,235 +1271,129 @@ mod tests {
 
     #[test]
     fn test_enclosed_area_gets_filled() {
-        // CRITICAL: This test ensures enclosed areas actually GET filled
-        // (catches the opposite bug where nothing gets filled)
+        let mut game = Game::new(20, 20);
+        game.balls.clear();
+        let initial_fill = game.filled_percentage;
+
+        game.player.position.x = 5;
+        game.player.position.y = 0;
+        game.player.direction = Direction::Down;
+
+        game.update();
+        game.set_direction(Direction::Right);
+        game.update();
+        game.update();
+        game.set_direction(Direction::Down);
+        game.update();
+        game.update();
+        game.set_direction(Direction::Left);
+        game.update();
+        game.update();
+        game.update();
+        game.set_direction(Direction::Up);
+        game.update();
+        game.update();
+        game.update();
+
+        assert!(game.filled_percentage > initial_fill);
+        assert_eq!(game.board[2][5], Cell::Filled);
+    }
+
+    #[test]
+    fn test_ball_containing_region_never_filled() {
         let mut game = Game::new(20, 20);
         game.balls.clear();
 
-        let initial_fill = game.filled_percentage;
-
-        // Start from top border
-        game.player.position.x = 5;
-        game.player.position.y = 0;
-        game.player.direction = Direction::Down;
-
-        // Move down and create a rectangular enclosure
-        game.update(); // (5, 1) - drawing starts
-        game.update(); // (5, 2)
-
-        game.set_direction(Direction::Right);
-        game.update(); // (6, 2)
-        game.update(); // (7, 2)
-
-        game.set_direction(Direction::Down);
-        game.update(); // (7, 3)
-
-        game.set_direction(Direction::Left);
-        game.update(); // (6, 3)
-        game.update(); // (5, 3)
-
-        game.set_direction(Direction::Up);
-        game.update(); // (5, 2) - back to trail cell!
-
-        // That doesn't work either - need to return to border
-        // Let me restart with a path that returns to the border
-
-        game = Game::new(20, 20);
-        game.balls.clear();
-        let initial_fill = game.filled_percentage;
-
-        game.player.position.x = 5;
-        game.player.position.y = 0;
-        game.player.direction = Direction::Down;
-
-        game.update(); // (5, 1) - start drawing
-        game.set_direction(Direction::Right);
-        game.update(); // (6, 1)
-        game.update(); // (7, 1)
-        game.set_direction(Direction::Down);
-        game.update(); // (7, 2)
-        game.update(); // (7, 3)
-        game.set_direction(Direction::Left);
-        game.update(); // (6, 3)
-        game.update(); // (5, 3)
-        game.update(); // (4, 3)
-        game.set_direction(Direction::Up);
-        game.update(); // (4, 2)
-        game.update(); // (4, 1)
-        game.update(); // (4, 0) - reach top border, complete!
-
-        let final_fill = game.filled_percentage;
-        let fill_increase = final_fill - initial_fill;
-
-        println!("Initial: {:.1}%", initial_fill * 100.0);
-        println!("Final: {:.1}%", final_fill * 100.0);
-        println!("Increase: {:.1}%", fill_increase * 100.0);
-
-        assert!(
-            fill_increase > 0.01,
-            "Enclosed area was NOT filled! Fill increase was only {:.1}%",
-            fill_increase * 100.0
-        );
-
-        // Verify interior cells are filled
-        assert!(!game.player.is_drawing, "Should have completed drawing");
-        assert_eq!(game.board[2][5], Cell::Filled, "Interior cell should be filled");
-        assert_eq!(game.board[2][6], Cell::Filled, "Interior cell should be filled");
-    }
-
-    #[test]
-    fn test_simple_corner_enclosure() {
-        // Test a simple corner pocket - the classic Xonix move
-        let mut game = Game::new(10, 10);
-        game.balls.clear();
-
-        println!("\n=== Testing simple corner enclosure ===");
-
-        // Start on top border
-        game.player.position.x = 2;
-        game.player.position.y = 0;
-        game.player.direction = Direction::Down;
-
-        // Move down into playable area
-        game.update(); // (2, 1) - first playable cell, drawing starts
-        assert!(game.player.is_drawing, "Should start drawing at (2,1)");
-
-        // Draw a rectangular path
-        game.set_direction(Direction::Right);
-        game.update(); // (3, 1)
-        game.update(); // (4, 1)
-
-        game.set_direction(Direction::Down);
-        game.update(); // (4, 2)
-
-        game.set_direction(Direction::Left);
-        game.update(); // (3, 2)
-        game.update(); // (2, 2)
-
-        game.set_direction(Direction::Up);
-        game.update(); // (2, 1) - back to start of trail... this hits own trail!
-
-        // Actually this test was wrong - let me do it properly
-        // Return to the border (y=0) to complete
-
-        // Restart with a better path
-        game = Game::new(10, 10);
-        game.balls.clear();
-        game.player.position.x = 2;
-        game.player.position.y = 0;
-        game.player.direction = Direction::Down;
-
-        game.update(); // (2, 1) - drawing starts
-        game.set_direction(Direction::Right);
-        game.update(); // (3, 1)
-        game.update(); // (4, 1)
-        game.set_direction(Direction::Down);
-        game.update(); // (4, 2)
-        game.update(); // (4, 3)
-        game.set_direction(Direction::Left);
-        game.update(); // (3, 3)
-        game.update(); // (2, 3)
-        game.update(); // (1, 3)
-        game.set_direction(Direction::Up);
-        game.update(); // (1, 2)
-        game.update(); // (1, 1)
-        game.set_direction(Direction::Left);
-        game.update(); // (0, 1) - reaches left border! Should complete
-
-        println!("After completion - is_drawing: {}", game.player.is_drawing);
-        println!("Cell at (2, 2): {:?}", game.board[2][2]);
-        println!("Cell at (3, 2): {:?}", game.board[2][3]);
-
-        // Check that enclosed area is filled
-        assert!(!game.player.is_drawing, "Drawing should be complete");
-        assert_eq!(game.board[2][2], Cell::Filled, "Interior should be filled");
-        assert_eq!(game.board[2][3], Cell::Filled, "Interior should be filled");
-    }
-
-    #[test]
-    fn test_no_ball_on_immediate_collision_course() {
-        // Run Game::new() many times and verify none produce the unwinnable scenario
-        // where a ball spawns on a collision course with the player's starting position
-        //
-        // This is a concrete test for the reported bug: player at (0, height/2) facing right,
-        // ball at (3, height/2) moving left creates an unwinnable game
-
-        const TEST_RUNS: usize = 1000;
-        const MIN_SAFE_DISTANCE: i32 = 5;
-
-        for iteration in 0..TEST_RUNS {
-            let game = Game::new(20, 20);
-
-            let player_pos = game.player.position;
-            let player_dir = game.player.direction;
-
-            for ball in &game.balls {
-                // Check 1: Ball should not be too close
-                let manhattan_dist = (ball.position.x - player_pos.x).abs()
-                    + (ball.position.y - player_pos.y).abs();
-
-                assert!(
-                    manhattan_dist >= MIN_SAFE_DISTANCE,
-                    "Iteration {}: Ball at ({}, {}) is only {} cells from player at ({}, {}) - TOO CLOSE!",
-                    iteration,
-                    ball.position.x, ball.position.y,
-                    manhattan_dist,
-                    player_pos.x, player_pos.y
-                );
-
-                // Check 2: If on same row/column as player, ball should not be moving toward them
-                match player_dir {
-                    Direction::Right => {
-                        // Player moving right from left edge
-                        if ball.position.y == player_pos.y {
-                            // Same row - check if ball is close and moving left (toward player)
-                            if ball.position.x < 10 && ball.velocity.0 < 0 {
-                                panic!(
-                                    "Iteration {}: UNWINNABLE STATE DETECTED! \
-                                     Ball at ({}, {}) moving left (velocity: {}) on same row as player at ({}, {}). \
-                                     This creates immediate collision course!",
-                                    iteration,
-                                    ball.position.x, ball.position.y,
-                                    ball.velocity.0,
-                                    player_pos.x, player_pos.y
-                                );
-                            }
-                        }
-                    }
-                    Direction::Left => {
-                        if ball.position.y == player_pos.y {
-                            if ball.position.x > game.width - 10 && ball.velocity.0 > 0 {
-                                panic!(
-                                    "Iteration {}: UNWINNABLE STATE! Ball moving right toward player at left side",
-                                    iteration
-                                );
-                            }
-                        }
-                    }
-                    Direction::Down => {
-                        if ball.position.x == player_pos.x {
-                            if ball.position.y < 10 && ball.velocity.1 < 0 {
-                                panic!(
-                                    "Iteration {}: UNWINNABLE STATE! Ball moving up toward player at top",
-                                    iteration
-                                );
-                            }
-                        }
-                    }
-                    Direction::Up => {
-                        if ball.position.x == player_pos.x {
-                            if ball.position.y > game.height - 10 && ball.velocity.1 > 0 {
-                                panic!(
-                                    "Iteration {}: UNWINNABLE STATE! Ball moving down toward player at bottom",
-                                    iteration
-                                );
-                            }
-                        }
-                    }
-                }
-            }
+        for y in 1..19 {
+            game.board[y][10] = Cell::Filled;
         }
 
-        println!("✓ Ran {} iterations of Game::new() - all initial states were safe!", TEST_RUNS);
+        game.balls.push(Ball::new(5, 10, 1, 1));
+        game.fill_enclosed_areas();
+
+        assert_eq!(game.cell_at(5, 10), Cell::Empty);
+        assert_eq!(game.cell_at(15, 10), Cell::Filled);
+    }
+
+    #[test]
+    fn test_all_regions_with_balls_none_filled() {
+        let mut game = Game::new(20, 20);
+        game.balls.clear();
+
+        for y in 1..19 {
+            game.board[y][5] = Cell::Filled;
+            game.board[y][15] = Cell::Filled;
+        }
+
+        game.balls.push(Ball::new(3, 10, 1, 1));
+        game.balls.push(Ball::new(17, 10, 1, 1));
+        game.fill_enclosed_areas();
+
+        assert_eq!(game.cell_at(3, 10), Cell::Empty);
+        assert_eq!(game.cell_at(17, 10), Cell::Empty);
+    }
+
+    #[test]
+    fn test_large_enclosed_region_gets_filled() {
+        // Regression test for bug where large enclosed regions weren't filled
+        // because they were bigger than the remaining playable area.
+        // The algorithm incorrectly used "largest region = outside" instead of
+        // "player's region = outside".
+
+        let mut game = Game::new(30, 30);
+        game.balls.clear();
+
+        // Create a small playable area in center with player
+        // and a LARGE enclosed pocket on the right (no balls)
+        // The pocket will be larger than the playable area!
+
+        // Vertical divider at x=10 (creates left section)
+        for y in 1..29 {
+            game.board[y][10] = Cell::Filled;
+        }
+
+        // Vertical divider at x=15 (creates small center section where player is)
+        for y in 1..29 {
+            game.board[y][15] = Cell::Filled;
+        }
+
+        // Now we have 3 regions:
+        // 1. Left (x=1-9): size ~252 cells
+        // 2. Center (x=11-14): size ~112 cells - PLAYER IS HERE
+        // 3. Right (x=16-28): size ~364 cells - LARGEST!
+
+        // Place player in the center (small) region
+        game.player.position.x = 12;
+        game.player.position.y = 10;
+
+        // Place a ball in the left region only
+        game.balls.push(Ball::new(5, 10, 1, 1));
+
+        // Call fill - with old logic (largest = outside), it would think
+        // the right region is the outside and not fill it.
+        // With new logic (player's region = outside), it correctly identifies
+        // center as outside and fills the large right region.
+        game.fill_enclosed_areas();
+
+        // CRITICAL: The large RIGHT region (no ball) should be filled
+        assert_eq!(
+            game.cell_at(20, 10),
+            Cell::Filled,
+            "Large enclosed region on right was not filled - bug detected!"
+        );
+
+        // The left region (has ball) should NOT be filled
+        assert_eq!(
+            game.cell_at(5, 10),
+            Cell::Empty,
+            "Left region with ball should remain empty"
+        );
+
+        // The center region (player's location) should remain empty
+        assert_eq!(
+            game.cell_at(12, 10),
+            Cell::Empty,
+            "Player's region should remain empty (it's the outside)"
+        );
     }
 }

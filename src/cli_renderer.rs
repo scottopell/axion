@@ -8,6 +8,7 @@ use crossterm::{
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{self, ClearType},
 };
+use std::collections::HashSet;
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
@@ -111,6 +112,12 @@ impl Renderer for CliRenderer {
 
         queue!(stdout, cursor::MoveTo(0, 0))?;
 
+        // Pre-compute ball positions for O(1) lookup (avoids O(n) search per cell)
+        let ball_positions: HashSet<(i32, i32)> = game.balls
+            .iter()
+            .map(|ball| (ball.position.x, ball.position.y))
+            .collect();
+
         // Draw board
         for y in 0..game.height {
             for x in 0..game.width {
@@ -127,25 +134,19 @@ impl Renderer for CliRenderer {
                     continue;
                 }
 
-                // Check if this is a ball position
-                let mut is_ball = false;
-                for ball in &game.balls {
-                    if ball.position.x == x && ball.position.y == y {
-                        queue!(
-                            stdout,
-                            SetBackgroundColor(Color::Black),
-                            SetForegroundColor(Color::Red),
-                            Print("()"),
-                            ResetColor
-                        )?;
-                        is_ball = true;
-                        break;
-                    }
+                // Check if this is a ball position (O(1) lookup instead of O(n) search)
+                if ball_positions.contains(&(x, y)) {
+                    queue!(
+                        stdout,
+                        SetBackgroundColor(Color::Black),
+                        SetForegroundColor(Color::Red),
+                        Print("()"),
+                        ResetColor
+                    )?;
+                    continue;
                 }
 
-                if !is_ball {
-                    self.draw_cell(cell, &mut stdout)?;
-                }
+                self.draw_cell(cell, &mut stdout)?;
             }
             queue!(stdout, ResetColor, Print("\r\n"))?;
         }

@@ -1,15 +1,23 @@
+use crossterm::terminal;
 use std::io;
 use std::time::{Duration, Instant};
 use xonix::{CliRenderer, Game, GameState, Input, Renderer};
-
-const GAME_WIDTH: i32 = 40;
-const GAME_HEIGHT: i32 = 20;
 
 // Game logic update rate (controls gameplay speed)
 const GAME_UPDATE_RATE: Duration = Duration::from_millis(100); // 10 updates/sec
 
 fn main() -> io::Result<()> {
-    let mut game = Game::new(GAME_WIDTH, GAME_HEIGHT);
+    // Get terminal size and calculate game dimensions
+    let (term_width, term_height) = terminal::size()?;
+
+    // Account for:
+    // - Each cell is 2 chars wide, so width = term_width / 2
+    // - Reserve 4 lines at bottom for info display
+    // - Minimum size of 20x10 for playability
+    let game_width = ((term_width / 2) as i32).max(20);
+    let game_height = ((term_height - 4) as i32).max(10);
+
+    let mut game = Game::new(game_width, game_height);
     let mut renderer = CliRenderer::new();
 
     renderer.init()?;
