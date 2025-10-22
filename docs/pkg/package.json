@@ -1,0 +1,15 @@
+{
+  "name": "axion",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "axion_bg.wasm",
+    "axion.js",
+    "axion.d.ts"
+  ],
+  "main": "axion.js",
+  "types": "axion.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

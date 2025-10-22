@@ -25,10 +25,10 @@ cargo run --bin axion-cli
 # Build (requires wasm-pack: cargo install wasm-pack)
 ./build-web.sh
 # Or manually:
-wasm-pack build --target web --out-dir www/pkg
+wasm-pack build --target web --out-dir docs/pkg
 
 # Run local server
-cd www
+cd docs
 python3 -m http.server 8080
 # Then open http://localhost:8080
 ```
@@ -166,6 +166,6 @@ cargo test test_simple_corner_enclosure -- --nocapture
 ## File Locations
 
 - Source: `src/`
-- Web assets: `www/` (HTML, CSS, JS, and generated `pkg/` from wasm-pack)
+- Web assets: `docs/` (HTML, CSS, JS, and generated `pkg/` from wasm-pack)
 - Proptest regression data: `proptest-regressions/`
 - Build script: `build-web.sh`

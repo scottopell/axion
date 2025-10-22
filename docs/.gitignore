@@ -1,5 +1,5 @@
-# WASM build output
-pkg/
+# WASM build output (committed for GitHub Pages)
+# pkg/
 
 # Node modules if using npm
 node_modules/

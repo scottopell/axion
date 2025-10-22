@@ -16,13 +16,13 @@ fi
 
 # Build the WASM package
 echo "Step 1: Building WASM module..."
-wasm-pack build --target web --out-dir www/pkg
+wasm-pack build --target web --out-dir docs/pkg
 
 echo ""
 echo "Step 2: Build complete!"
 echo ""
 echo "To run the web version:"
-echo "  cd www"
+echo "  cd docs"
 echo "  python3 -m http.server 8080"
 echo ""
 echo "Then open http://localhost:8080 in your browser"

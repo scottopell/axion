@@ -2,8 +2,8 @@
 /target/
 Cargo.lock
 
-# Web/WASM generated files
-www/pkg/
+# Web/WASM generated files (committed for GitHub Pages)
+# docs/pkg/
 
 # IDE
 .vscode/
