@@ -7,11 +7,12 @@ use std::io;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlElement, KeyboardEvent};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlElement, KeyboardEvent, TouchEvent};
 
 const CELL_SIZE: f64 = 16.0;
 const TARGET_FRAME_TIME: f64 = 16.0; // ~60 FPS
 const GAME_UPDATE_INTERVAL: f64 = 100.0; // Game logic updates at 10 Hz
+const SWIPE_THRESHOLD: f64 = 30.0; // Minimum distance in pixels to register a swipe
 
 // Colors (retro palette)
 const COLOR_EMPTY: &str = "#000000";
@@ -97,6 +98,9 @@ pub struct WebRenderer {
 
     // Input state
     pending_input: Rc<RefCell<Option<Input>>>,
+
+    // Touch state
+    touch_start_pos: Rc<RefCell<Option<(f64, f64)>>>,
 }
 
 impl WebRenderer {
@@ -120,6 +124,7 @@ impl WebRenderer {
         let device_pixel_ratio = window.device_pixel_ratio();
 
         let pending_input = Rc::new(RefCell::new(None));
+        let touch_start_pos = Rc::new(RefCell::new(None));
 
         Ok(Self {
             canvas,
@@ -132,6 +137,7 @@ impl WebRenderer {
             ball_trails: Vec::new(),
             fill_animation: None,
             pending_input,
+            touch_start_pos,
         })
     }
 
@@ -161,6 +167,123 @@ impl WebRenderer {
             .unwrap();
 
         closure.forget(); // Keep listener alive
+    }
+
+    fn setup_touch_listeners(&self) {
+        let pending_input = self.pending_input.clone();
+        let touch_start_pos = self.touch_start_pos.clone();
+        let canvas = self.canvas.clone();
+
+        // TouchStart: Record initial position
+        let touch_start_pos_clone = touch_start_pos.clone();
+        let touchstart_closure = Closure::wrap(Box::new(move |event: TouchEvent| {
+            event.prevent_default(); // Prevent zooming, scrolling, etc.
+
+            if let Some(touch) = event.touches().item(0) {
+                let x = touch.client_x() as f64;
+                let y = touch.client_y() as f64;
+                *touch_start_pos_clone.borrow_mut() = Some((x, y));
+            }
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        canvas
+            .add_event_listener_with_callback("touchstart", touchstart_closure.as_ref().unchecked_ref())
+            .unwrap();
+        touchstart_closure.forget();
+
+        // TouchMove: Prevent default to avoid scrolling
+        let touchmove_closure = Closure::wrap(Box::new(move |event: TouchEvent| {
+            event.prevent_default();
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        canvas
+            .add_event_listener_with_callback("touchmove", touchmove_closure.as_ref().unchecked_ref())
+            .unwrap();
+        touchmove_closure.forget();
+
+        // TouchEnd: Detect swipe direction
+        let touch_start_pos_clone = touch_start_pos.clone();
+        let pending_input_clone = pending_input.clone();
+        let touchend_closure = Closure::wrap(Box::new(move |event: TouchEvent| {
+            event.prevent_default();
+
+            // Get the touch that just ended
+            if let Some(touch) = event.changed_touches().item(0) {
+                let end_x = touch.client_x() as f64;
+                let end_y = touch.client_y() as f64;
+
+                // Check if we have a start position
+                if let Some((start_x, start_y)) = *touch_start_pos_clone.borrow() {
+                    let dx = end_x - start_x;
+                    let dy = end_y - start_y;
+
+                    // Calculate absolute distances
+                    let abs_dx = dx.abs();
+                    let abs_dy = dy.abs();
+
+                    // Determine if swipe was strong enough and which direction
+                    let input = if abs_dx > SWIPE_THRESHOLD || abs_dy > SWIPE_THRESHOLD {
+                        // Primary direction is the one with larger delta
+                        if abs_dx > abs_dy {
+                            // Horizontal swipe
+                            if dx > 0.0 {
+                                Some(Input::Direction(Direction::Right))
+                            } else {
+                                Some(Input::Direction(Direction::Left))
+                            }
+                        } else {
+                            // Vertical swipe
+                            if dy > 0.0 {
+                                Some(Input::Direction(Direction::Down))
+                            } else {
+                                Some(Input::Direction(Direction::Up))
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
+                    // If we detected a valid swipe, register input and vibrate
+                    if let Some(input) = input {
+                        *pending_input_clone.borrow_mut() = Some(input);
+
+                        // Haptic feedback (vibrate for 50ms)
+                        // Try to vibrate - this will fail silently if not supported
+                        if let Some(window) = web_sys::window() {
+                            let navigator = window.navigator();
+                            let _ = js_sys::Reflect::get(&navigator, &JsValue::from_str("vibrate"))
+                                .ok()
+                                .and_then(|vibrate_fn| {
+                                    if vibrate_fn.is_function() {
+                                        let vibrate = vibrate_fn.dyn_ref::<js_sys::Function>()?;
+                                        let _ = vibrate.call1(&navigator, &JsValue::from_f64(50.0));
+                                    }
+                                    Some(())
+                                });
+                        }
+                    }
+
+                    // Clear touch start position
+                    *touch_start_pos_clone.borrow_mut() = None;
+                }
+            }
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        canvas
+            .add_event_listener_with_callback("touchend", touchend_closure.as_ref().unchecked_ref())
+            .unwrap();
+        touchend_closure.forget();
+
+        // TouchCancel: Clear state if touch is cancelled
+        let touchcancel_closure = Closure::wrap(Box::new(move |event: TouchEvent| {
+            event.prevent_default();
+            *touch_start_pos.borrow_mut() = None;
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        canvas
+            .add_event_listener_with_callback("touchcancel", touchcancel_closure.as_ref().unchecked_ref())
+            .unwrap();
+        touchcancel_closure.forget();
     }
 
     fn current_time(&self) -> f64 {
@@ -328,7 +451,7 @@ impl WebRenderer {
         );
         self.context.fill_text(&info, 5.0, y_offset).unwrap();
 
-        let controls = "Controls: Arrow Keys | Q: Quit | R: Restart";
+        let controls = "Controls: Arrow Keys / Swipe | Q: Quit | R: Restart";
         self.context.fill_text(controls, 5.0, y_offset + 20.0).unwrap();
 
         match game.state {
@@ -351,8 +474,9 @@ impl WebRenderer {
 
 impl Renderer for WebRenderer {
     fn init(&mut self) -> io::Result<()> {
-        // Setup keyboard listener
+        // Setup input listeners
         self.setup_keyboard_listener();
+        self.setup_touch_listeners();
 
         // Initialize time
         self.last_update_time = self.current_time();
