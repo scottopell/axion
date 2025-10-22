@@ -201,7 +201,7 @@ impl WebRenderer {
             .unwrap();
         touchmove_closure.forget();
 
-        // TouchEnd: Detect swipe direction
+        // TouchEnd: Detect swipe direction or tap
         let touch_start_pos_clone = touch_start_pos.clone();
         let pending_input_clone = pending_input.clone();
         let touchend_closure = Closure::wrap(Box::new(move |event: TouchEvent| {
@@ -223,7 +223,7 @@ impl WebRenderer {
 
                     // Determine if swipe was strong enough and which direction
                     let input = if abs_dx > SWIPE_THRESHOLD || abs_dy > SWIPE_THRESHOLD {
-                        // Primary direction is the one with larger delta
+                        // This is a swipe - primary direction is the one with larger delta
                         if abs_dx > abs_dy {
                             // Horizontal swipe
                             if dx > 0.0 {
@@ -240,10 +240,12 @@ impl WebRenderer {
                             }
                         }
                     } else {
-                        None
+                        // This is a tap (movement was below threshold)
+                        // Taps can be used for restart/next level
+                        Some(Input::Restart)
                     };
 
-                    // If we detected a valid swipe, register input and vibrate
+                    // If we detected a valid input, register it and vibrate
                     if let Some(input) = input {
                         *pending_input_clone.borrow_mut() = Some(input);
 
@@ -451,20 +453,20 @@ impl WebRenderer {
         );
         self.context.fill_text(&info, 5.0, y_offset).unwrap();
 
-        let controls = "Controls: Arrow Keys / Swipe | Q: Quit | R: Restart";
+        let controls = "Controls: Arrow Keys / Swipe | Tap / R: Restart";
         self.context.fill_text(controls, 5.0, y_offset + 20.0).unwrap();
 
         match game.state {
             GameState::Won => {
                 self.context.set_fill_style_str("#55FF55");
                 self.context
-                    .fill_text("YOU WIN! Press SPACE for next level", 5.0, y_offset + 40.0)
+                    .fill_text("YOU WIN! Tap screen or press SPACE for next level", 5.0, y_offset + 40.0)
                     .unwrap();
             }
             GameState::Lost => {
                 self.context.set_fill_style_str("#FF5555");
                 self.context
-                    .fill_text("GAME OVER! Press R to restart", 5.0, y_offset + 40.0)
+                    .fill_text("GAME OVER! Tap screen or press R to restart", 5.0, y_offset + 40.0)
                     .unwrap();
             }
             GameState::Playing => {}
