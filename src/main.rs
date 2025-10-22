@@ -1,7 +1,7 @@
 use crossterm::terminal;
 use std::io;
 use std::time::{Duration, Instant};
-use xonix::{CliRenderer, Game, GameState, Input, Renderer};
+use axion::{CliRenderer, Game, GameState, Input, Renderer};
 
 // Game logic update rate (controls gameplay speed)
 const GAME_UPDATE_RATE: Duration = Duration::from_millis(100); // 10 updates/sec

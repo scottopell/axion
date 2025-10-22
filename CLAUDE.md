@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Xonix is a Rust implementation of the classic territory-capturing game with both CLI and Web (WASM) interfaces. The game features smooth 60 FPS animations in the web version while maintaining consistent 10 Hz gameplay logic.
+Axion is a Rust implementation of the classic territory-capturing game with both CLI and Web (WASM) interfaces. The game features smooth 60 FPS animations in the web version while maintaining consistent 10 Hz gameplay logic.
 
 ## Build Commands
 
@@ -14,10 +14,10 @@ Xonix is a Rust implementation of the classic territory-capturing game with both
 cargo build --release
 
 # Run
-cargo run --bin xonix-cli
+cargo run --bin axion-cli
 
 # Run optimized binary
-./target/release/xonix-cli
+./target/release/axion-cli
 ```
 
 ### Web Version (WASM)
@@ -101,7 +101,7 @@ The codebase uses conditional compilation for platform-specific code:
 5. Fill regions without balls (safe to capture)
 6. If all enclosed regions have balls, fill the smallest one
 
-This "largest region = outside" approach is the classic Xonix behavior.
+This "largest region = outside" approach is the classic territory-capture behavior (inspired by Xonix).
 
 **Movement Constraints:**
 - Cannot reverse direction while drawing a trail (game.rs:77-84)

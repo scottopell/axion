@@ -77,7 +77,7 @@ pub fn start_game() -> Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
-    web_sys::console::log_1(&"[WASM] Starting Xonix initialization...".into());
+    web_sys::console::log_1(&"[WASM] Starting Axion initialization...".into());
 
     // Create game loop
     web_sys::console::log_1(&"[WASM] Creating game loop...".into());

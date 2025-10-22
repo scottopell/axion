@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Build script for Xonix Web Version
+# Build script for Axion Web Version
 
 set -e
 
-echo "Building Xonix for Web (WASM)..."
+echo "Building Axion for Web (WASM)..."
 echo ""
 
 # Check if wasm-pack is installed

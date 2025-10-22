@@ -1,4 +1,4 @@
-# Xonix
+# Axion
 
 A Rust implementation of the classic territory-capturing game with CLI and Web (WASM) interfaces.
 
@@ -13,7 +13,7 @@ Control a cursor to claim territory by drawing lines from filled areas into empt
 ### CLI Version
 ```bash
 cargo build --release
-cargo run --bin xonix-cli
+cargo run --bin axion-cli
 ```
 
 ### Web Version (60 FPS)
@@ -59,7 +59,7 @@ Result: Buttery-smooth gliding motion despite discrete game updates.
 
 ### Territory Capture Algorithm
 
-Classic Xonix flood-fill logic (game.rs:196-313):
+Classic flood-fill logic (game.rs:196-313):
 1. Player completes trail → trigger flood fill
 2. Find all empty regions via BFS
 3. Largest region = "outside" playable area

@@ -198,7 +198,7 @@ impl Game {
     fn fill_enclosed_areas(&mut self) {
         // SIMPLER APPROACH: The LARGEST empty region after completing a trail is the
         // "outside" playable area. All smaller regions are enclosed and should be filled.
-        // This is the classic Xonix behavior.
+        // This is the classic territory-capture behavior (inspired by Xonix).
 
         // Find ALL empty regions first
         let mut visited = vec![vec![false; self.width as usize]; self.height as usize];
@@ -299,7 +299,7 @@ impl Game {
         }
 
         // Determine which regions to fill
-        // ORIGINAL XONIX BEHAVIOR: Only fill regions WITHOUT balls
+        // CLASSIC BEHAVIOR: Only fill regions WITHOUT balls
         // Regions with balls are NEVER automatically filled - this is the core mechanic
         // that makes the game strategic (need multiple cuts to corner a ball)
         let regions_to_fill: Vec<usize> = regions_without_balls;

@@ -1,5 +1,5 @@
 [package]
-name = "xonix"
+name = "axion"
 version = "0.1.0"
 edition = "2021"
 
@@ -33,10 +33,10 @@ getrandom = { version = "0.2", features = ["js"] }
 proptest = "1.0"
 
 [lib]
-name = "xonix"
+name = "axion"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "xonix-cli"
+name = "axion-cli"
 path = "src/main.rs"

@@ -2,11 +2,11 @@
 
 async function init() {
     try {
-        console.log("Loading Xonix WASM module...");
+        console.log("Loading Axion WASM module...");
 
         // Import the WASM module
-        // The path will be './pkg/xonix.js' after building with wasm-pack
-        const wasm = await import('./pkg/xonix.js');
+        // The path will be './pkg/axion.js' after building with wasm-pack
+        const wasm = await import('./pkg/axion.js');
 
         console.log("WASM module loaded successfully!");
         console.log("Initializing game...");
