@@ -88,6 +88,40 @@ Property-based tests validate invariants: fill percentage ≤100%, monotonic inc
 └── proptest-regressions/  # Test regression data (gitignored)
 ```
 
+## Comparison to Original Xonix
+
+Axion is a faithful modernization of the 1984 DOS game Xonix (itself inspired by the arcade game QIX). The core territory-capture mechanics are preserved while making targeted simplifications for accessibility.
+
+### What's Preserved
+- ✅ Territory capture via trail drawing and flood fill
+- ✅ 75% fill threshold to win
+- ✅ Cannot reverse direction while drawing trail
+- ✅ Balls bounce off walls and filled territory
+- ✅ Ball collision with player/trail = instant loss
+- ✅ Regions containing balls are NOT auto-filled (strategic core)
+- ✅ Level progression with increasing ball count
+
+### Potential Future Enhancements
+The original Xonix/QIX included additional mechanics that could be added:
+
+**Edge-Patrolling Enemies (Sparx):**
+- Enemies that travel along filled territory edges
+- "Super Sparx" variants that can chase player along unfinished trails
+- Would add pressure to complete trails quickly
+
+**Fast/Slow Draw Speed:**
+- Hold modifier key for "slow draw" mode (double points, slower movement)
+- Default "fast draw" for normal points and speed
+- Adds risk/reward scoring strategy
+
+**Idle Fuse Mechanic:**
+- If player stops while drawing, a "fuse" burns along the trail toward them
+- Forces continuous movement while exposed
+- Death if fuse catches the player
+
+### Design Philosophy
+The current implementation focuses on the core loop: carefully carving territory while avoiding balls. The simplified enemy behavior (no edge-patrollers, no active pursuit) makes the game more approachable while preserving strategic depth. The player-position-based flood fill algorithm improves on the original's size-only approach.
+
 ## License
 
 MIT
