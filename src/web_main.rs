@@ -52,6 +52,22 @@ impl GameLoop {
                 Input::NextLevel if self.game.state == GameState::Won => {
                     self.game.next_level();
                 }
+                Input::Tap => {
+                    // Handle tap contextually based on game state
+                    match self.game.state {
+                        GameState::Won => {
+                            // Tap advances to next level when won
+                            self.game.next_level();
+                        }
+                        GameState::Lost => {
+                            // Tap restarts when lost
+                            self.game.reset();
+                        }
+                        GameState::Playing => {
+                            // Ignore taps during active gameplay to avoid accidental restarts
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -74,7 +90,7 @@ impl GameLoop {
 #[wasm_bindgen]
 pub fn start_game() -> Result<(), JsValue> {
     // Set panic hook for better error messages
-    #[cfg(feature = "console_error_panic_hook")]
+    #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
     web_sys::console::log_1(&"[WASM] Starting Axion initialization...".into());

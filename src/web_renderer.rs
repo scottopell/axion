@@ -212,8 +212,9 @@ impl WebRenderer {
                 let end_x = touch.client_x() as f64;
                 let end_y = touch.client_y() as f64;
 
-                // Check if we have a start position
-                if let Some((start_x, start_y)) = *touch_start_pos_clone.borrow() {
+                // Check if we have a start position - copy it out to release the borrow
+                let start_pos = *touch_start_pos_clone.borrow();
+                if let Some((start_x, start_y)) = start_pos {
                     let dx = end_x - start_x;
                     let dy = end_y - start_y;
 
@@ -241,8 +242,8 @@ impl WebRenderer {
                         }
                     } else {
                         // This is a tap (movement was below threshold)
-                        // Taps can be used for restart/next level
-                        Some(Input::Restart)
+                        // Send Tap input - will be handled contextually based on game state
+                        Some(Input::Tap)
                     };
 
                     // If we detected a valid input, register it and vibrate

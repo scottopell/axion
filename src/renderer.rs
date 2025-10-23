@@ -8,6 +8,7 @@ pub enum Input {
     Quit,
     Restart,
     NextLevel,
+    Tap, // Mobile tap gesture - handled contextually based on game state
 }
 
 /// Trait that abstracts rendering implementation.
